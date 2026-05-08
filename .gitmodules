@@ -1,0 +1,4 @@
+[submodule "third-party/kuuube/opentabletdriver"]
+	path = third-party/kuuube/opentabletdriver
+	url = https://github.com/Kuuuube/OpenTabletDriver
+	branch = pth-x60-rotation
