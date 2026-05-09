@@ -8,8 +8,4 @@ namespace nahkd123.PenGyro.OpenTabletDriver;
 public class PenGyroLinuxFilter : PenGyroBaseFilter
 {
     public override IPlatform GetPlatform() => PenGyro.GetPlatform(PlatformType.Linux);
-
-    public static IEnumerable<TransportType> AllTransports => [
-        TransportType.BLE
-    ];
 }

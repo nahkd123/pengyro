@@ -1,7 +1,7 @@
 
 namespace nahkd123.PenGyro.Platform.Linux;
 
-public class LinuxPlatformHub : IPlatform
+internal class LinuxPlatformHub : IPlatform
 {
     public PlatformType Type => PlatformType.Linux;
     private readonly BlueZPlatform blePlatform = new();
