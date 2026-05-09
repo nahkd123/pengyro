@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Linux.Bluetooth" Version="6.0.0-pre3" />
+    <ProjectReference Include="..\nahkd123.PenGyro\nahkd123.PenGyro.csproj" />
+    <ProjectReference Include="..\..\..\third-party\kuuube\opentabletdriver\OpenTabletDriver.Plugin\OpenTabletDriver.Plugin.csproj" />
+  </ItemGroup>
+
+</Project>
