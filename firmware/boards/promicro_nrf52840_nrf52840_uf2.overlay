@@ -1,0 +1,13 @@
+/ {
+	aliases {
+		accel0 = &bmi160;
+		gyro0 = &bmi160;
+	};
+};
+
+&i2c0 {
+	bmi160: bmi160@68 {
+		label = "BMI160";
+		reg = <0x68>;
+	};
+};
