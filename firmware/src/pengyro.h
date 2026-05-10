@@ -2,6 +2,7 @@
 #define _PENGYRO_H
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
 
 /**
  * @brief PenGyro configuration
@@ -121,6 +122,8 @@ int pengyro_on_calibrate();
  * @brief Main function for PenGyro
  *
  * This function is meant to be called in `main()` function of your Zephyr app.
+ *
+ * @param led The LED indicator device
  */
 int pengyro_main();
 

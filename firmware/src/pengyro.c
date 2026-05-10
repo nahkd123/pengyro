@@ -1,4 +1,5 @@
 #include "pengyro.h"
+#include "led.h"
 
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -17,13 +18,13 @@ static const struct bt_uuid_128 _pengyro_bt_uuid_char_config = BT_UUID_INIT_128(
 static const struct bt_uuid_128 _pengyro_bt_uuid_char_consts = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_CONSTS);
 static const struct bt_uuid_128 _pengyro_bt_uuid_char_data = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_DATA);
 
-static bool _pengyro_polling = false;
+static bool _pengyro_notify_data = false;
 static struct pengyro_consts _pengyro_consts;
 static struct pengyro_config _pengyro_config = { .cmd = PENGYRO_CMD_IDLE };
 
 static void _pengyro_bt_on_ccc_config_changed(const struct bt_gatt_attr* attr, uint16_t value) {
     if (bt_uuid_cmp(attr->uuid, &_pengyro_bt_uuid_char_data.uuid)) {
-        _pengyro_polling = value == BT_GATT_CCC_NOTIFY;
+        _pengyro_notify_data = value == BT_GATT_CCC_NOTIFY;
     }
 }
 
@@ -121,6 +122,7 @@ static void _pengyro_bt_on_advertise_work(struct k_work* work) {
     }
 
     LOG_INF("Now advertising as %s", CONFIG_BT_DEVICE_NAME);
+    led_set_state(LED_STATE_PAIRING);
 }
 
 static K_WORK_DEFINE(_pengyro_advertise_work, _pengyro_bt_on_advertise_work);
@@ -129,15 +131,21 @@ static void _pengyro_bt_advertise() {
     k_work_submit(&_pengyro_advertise_work);
 }
 
+static void _pengyro_bt_on_connected(struct bt_conn* conn, uint8_t err) {
+    led_set_state(LED_STATE_IDLE);
+}
+
 static void _pengyro_bt_on_conn_recycled() {
     LOG_INF("A new connection slot is available, starting advertising");
     _pengyro_bt_advertise();
 }
 
 BT_CONN_CB_DEFINE(_pengyro_bt_callbacks) = {
+    .connected = _pengyro_bt_on_connected,
     .recycled = _pengyro_bt_on_conn_recycled
 };
 
+// Main thread
 int pengyro_main() {
     int err;
     struct pengyro_data data;
@@ -184,8 +192,11 @@ int pengyro_main() {
         LOG_INF("Sensor is initialized!");
 
         while (1) {
+            bool polling = _pengyro_notify_data;
+
+            // Commands
             if (_pengyro_config.cmd == PENGYRO_CMD_CALIBRATE) {
-                if (!last_polling && !_pengyro_polling) {
+                if (!last_polling && !polling) {
                     LOG_INF("Resuming sensor for calibration...");
 
                     if ((err = pengyro_on_poll_start())) {
@@ -201,7 +212,7 @@ int pengyro_main() {
 
                 _pengyro_config.cmd = PENGYRO_CMD_IDLE;
 
-                if (!last_polling && !_pengyro_polling) {
+                if (!last_polling && !polling) {
                     LOG_INF("Suspending sensor after calibration...");
 
                     if ((err = pengyro_on_poll_stop())) {
@@ -210,11 +221,12 @@ int pengyro_main() {
                 }
             }
 
-            if (last_polling ^ _pengyro_polling) {
+            // Polling data
+            if (last_polling ^ polling) {
                 LOG_INF("Polling state changed");
-                last_polling = _pengyro_polling;
+                last_polling = polling;
 
-                if (_pengyro_polling) {
+                if (polling) {
                     if ((err = pengyro_on_poll_start())) {
                         LOG_ERR("Sensor resuming failed (%d), restarting", err);
                         break;
@@ -226,17 +238,22 @@ int pengyro_main() {
                 }
             }
 
-            if (_pengyro_polling) {
+            if (polling) {
                 if ((err = pengyro_on_poll(&data))) {
                     LOG_ERR("Sensor poll failed (%d), restarting", err);
-                    continue;
+                    break;
                 }
+            } else {
+                // TODO: Wake the thread up from sleep
+                k_sleep(K_MSEC(100));
+                continue;
+            }
 
+            // Processing & notifying
+            if (_pengyro_notify_data) {
                 if ((err = bt_gatt_notify(NULL, data_attr, &data, sizeof(struct pengyro_data)))) {
                     LOG_WRN("Bluetooth GATT notify failed (%d)", err);
                 }
-            } else {
-                k_sleep(K_MSEC(100));
             }
         }
     }

@@ -10,4 +10,5 @@ target_sources(app
         src/main.c
         src/bmi160.c
         src/pengyro.c
+        src/led.c
 )
