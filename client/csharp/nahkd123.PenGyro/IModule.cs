@@ -10,8 +10,11 @@ public interface IModule : IDisposable
 
     event EventHandler<ModuleRawData> Raw;
     event EventHandler<ModuleData> Data;
+    event EventHandler<double> Rotation;
 
     void SendCommand(ModuleCommand command);
-    void Start();
-    void Stop();
+    void StartData();
+    void StopData();
+    void StartRotation();
+    void StopRotation();
 }

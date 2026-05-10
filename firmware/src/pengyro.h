@@ -15,7 +15,7 @@
  */
 struct pengyro_config {
     /**
-     * @brief Current executing command
+     * @brief Currently executing command
      *
      * This shows the command that is currently being executed. The commands are defined in `PENGYRO_CMD_*` enum. While
      * the command is being executed, this field will retain the value, and it will automatically set back to
@@ -71,16 +71,38 @@ struct pengyro_data {
     int16_t gyr[3];
 };
 
+/**
+ * @brief PenGyro rotation data
+ *
+ * This typdef define the rotation data that will be reported to host. The value is reported in degrees and wraps around
+ * 360deg. In other words, the value is between 0deg (inclusively) and 360deg (exclusively).
+ *
+ * The characteristic UUID is `270b1d88-ac32-4658-99d3-babd43a2db93`
+ */
+typedef double pengyro_rotation;
+
+/**
+ * @brief Callback on initializing default values
+ *
+ * This function will be called by PenGyro to initialize default values. Since the values are not stored in NVRAM, this
+ * function will always be called on start.
+ */
 void pengyro_on_init(struct pengyro_consts* consts, struct pengyro_config* config);
 
 /**
  * @brief Callback on setting up
  *
- * This function will be called by PenGyro to initialize the sensors. If this function is failed, the system will
- * attempt to reinitialize everything.
+ * This function will be called by PenGyro to initialize the sensor. If this function is failed, the system will attempt
+ * to reinitialize everything.
  */
 int pengyro_on_setup();
 
+/**
+ * @brief Callback on configure
+ *
+ * This function will be called by PenGyro to reconfigure the sensor. If this function is failed, the system will
+ * attempt to reinitialize everything.
+ */
 int pengyro_on_configure(struct pengyro_config* config);
 
 /**

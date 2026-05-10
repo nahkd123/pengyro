@@ -12,6 +12,7 @@ internal class BlueZModule : IModule
     private readonly IGattService1 service;
     private readonly GattCharacteristic configAttr;
     private readonly GattCharacteristic dataAttr;
+    private readonly GattCharacteristic rotationAttr;
     private bool reading = false;
     private ModuleConfig lastConfig;
 
@@ -77,6 +78,7 @@ internal class BlueZModule : IModule
 
     public event EventHandler<ModuleRawData>? Raw;
     public event EventHandler<ModuleData>? Data;
+    public event EventHandler<double>? Rotation;
 
     public BlueZModule(ModuleIdentifier id, Adapter adapter, Device device)
     {
@@ -89,6 +91,8 @@ internal class BlueZModule : IModule
         lastConfig = Unsafe.ReadUnaligned<ModuleConfig>(ref configAttr.ReadValueAsync(TimeSpan.FromSeconds(1)).Result[0]);
         dataAttr = service.GetCharacteristicAsync(PenGyro.DATA_UUID).Result ?? throw new Exception("Client is outdated (unable to find data attribute)");
         dataAttr.Value += OnData;
+        rotationAttr = service.GetCharacteristicAsync(PenGyro.ROTATION_UUID).Result ?? throw new Exception("Client is outdated (unable to find rotation attribute)");
+        rotationAttr.Value += OnRotation;
         using var constsAttr = service.GetCharacteristicAsync(PenGyro.CONSTANTS_UUID).Result ?? throw new Exception("Client is outdated (unable to find constants attribute)");
         Constants = Unsafe.ReadUnaligned<ModuleConstants>(ref constsAttr.ReadValueAsync(TimeSpan.FromSeconds(1)).Result[0]);
 
@@ -114,14 +118,24 @@ internal class BlueZModule : IModule
         while (Config.Command != command) Thread.Sleep(20);
     }
 
-    public void Start()
+    public void StartData()
     {
         dataAttr.StartNotifyAsync().Wait();
     }
 
-    public void Stop()
+    public void StopData()
     {
         dataAttr.StopNotifyAsync().Wait();
+    }
+
+    public void StartRotation()
+    {
+        rotationAttr.StartNotifyAsync().Wait();
+    }
+
+    public void StopRotation()
+    {
+        rotationAttr.StopNotifyAsync().Wait();
     }
 
     private Task OnData(GattCharacteristic sender, GattCharacteristicValueEventArgs args)
@@ -133,11 +147,22 @@ internal class BlueZModule : IModule
         return Task.CompletedTask;
     }
 
+    private Task OnRotation(GattCharacteristic sender, GattCharacteristicValueEventArgs args)
+    {
+        var rotation = Unsafe.ReadUnaligned<double>(ref args.Value[0]);
+        reading = true;
+        Rotation?.Invoke(this, rotation);
+        reading = false;
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         configAttr.Dispose();
         dataAttr.Value -= OnData;
         dataAttr.Dispose();
+        rotationAttr.Value -= OnRotation;
+        rotationAttr.Dispose();
         device.Dispose();
         adapter.Dispose();
     }

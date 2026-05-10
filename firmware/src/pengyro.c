@@ -1,6 +1,7 @@
 #include "pengyro.h"
 #include "led.h"
 
+#include <math.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -12,20 +13,27 @@ LOG_MODULE_REGISTER(pengyro);
 #define PENGYRO_BT_UUID_CHAR_CONFIG BT_UUID_128_ENCODE(0xee8cf7e0, 0xa370, 0x4fb2, 0x9d16, 0xd1e31ac66051)
 #define PENGYRO_BT_UUID_CHAR_CONSTS BT_UUID_128_ENCODE(0xf1563870, 0xf4e5, 0x41ba, 0x8165, 0x7954f2513905)
 #define PENGYRO_BT_UUID_CHAR_DATA BT_UUID_128_ENCODE(0xd312a6d2, 0x2375, 0x48fb, 0xa333, 0xc413144bc6c8)
+#define PENGYRO_BT_UUID_CHAR_ROTATION BT_UUID_128_ENCODE(0x270b1d88, 0xac32, 0x4658, 0x99d3, 0xbabd43a2db93)
 
 static const struct bt_uuid_128 _pengyro_bt_uuid_service = BT_UUID_INIT_128(PENGYRO_BT_UUID_SERVICE);
 static const struct bt_uuid_128 _pengyro_bt_uuid_char_config = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_CONFIG);
 static const struct bt_uuid_128 _pengyro_bt_uuid_char_consts = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_CONSTS);
 static const struct bt_uuid_128 _pengyro_bt_uuid_char_data = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_DATA);
+static const struct bt_uuid_128 _pengyro_bt_uuid_char_rotation = BT_UUID_INIT_128(PENGYRO_BT_UUID_CHAR_ROTATION);
 
 static bool _pengyro_notify_data = false;
+static bool _pengyro_notify_rotation = false;
 static struct pengyro_consts _pengyro_consts;
 static struct pengyro_config _pengyro_config = { .cmd = PENGYRO_CMD_IDLE };
 
-static void _pengyro_bt_on_ccc_config_changed(const struct bt_gatt_attr* attr, uint16_t value) {
-    if (bt_uuid_cmp(attr->uuid, &_pengyro_bt_uuid_char_data.uuid)) {
-        _pengyro_notify_data = value == BT_GATT_CCC_NOTIFY;
-    }
+static void _pengyro_bt_on_data_ccc_config_changed(const struct bt_gatt_attr* attr, uint16_t value) {
+    _pengyro_notify_data = value == BT_GATT_CCC_NOTIFY;
+    LOG_INF("Data CCC configuration changed to %d", _pengyro_notify_data);
+}
+
+static void _pengyro_bt_on_rotation_ccc_config_changed(const struct bt_gatt_attr* attr, uint16_t value) {
+    _pengyro_notify_rotation = value == BT_GATT_CCC_NOTIFY;
+    LOG_INF("Rotation CCC configuration changed to %d", _pengyro_notify_rotation);
 }
 
 static ssize_t _pengyro_bt_on_config_read(struct bt_conn* conn, const struct bt_gatt_attr* attr, void* buf, uint16_t len, uint16_t offset) {
@@ -76,23 +84,12 @@ static ssize_t _pengyro_bt_on_consts_read(struct bt_conn* conn, const struct bt_
 
 static BT_GATT_SERVICE_DEFINE(_pengyro_bt_service,
     BT_GATT_PRIMARY_SERVICE(&_pengyro_bt_uuid_service),
-    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_config.uuid,
-        BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
-        _pengyro_bt_on_config_read,
-        _pengyro_bt_on_config_write,
-        NULL),
-    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_consts.uuid,
-        BT_GATT_CHRC_READ,
-        BT_GATT_PERM_READ,
-        _pengyro_bt_on_consts_read,
-        NULL,
-        NULL),
-    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_data.uuid,
-        BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_NONE,
-        NULL, NULL, NULL),
-    BT_GATT_CCC(_pengyro_bt_on_ccc_config_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
+    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_config.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, _pengyro_bt_on_config_read, _pengyro_bt_on_config_write, NULL),
+    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_consts.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, _pengyro_bt_on_consts_read, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_data.uuid, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL, NULL, NULL),
+    BT_GATT_CCC(_pengyro_bt_on_data_ccc_config_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&_pengyro_bt_uuid_char_rotation.uuid, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL, NULL, NULL),
+    BT_GATT_CCC(_pengyro_bt_on_rotation_ccc_config_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
 );
 
 static const struct bt_data ad[] = {
@@ -149,6 +146,7 @@ BT_CONN_CB_DEFINE(_pengyro_bt_callbacks) = {
 int pengyro_main() {
     int err;
     struct pengyro_data data;
+    double rotation = 0;
 
     pengyro_on_init( &_pengyro_consts, &_pengyro_config);
     LOG_INF("Loaded default values");
@@ -168,6 +166,17 @@ int pengyro_main() {
 
     if (data_attr == NULL) {
         LOG_ERR("Data attribute is not defined. This is a fatal error.");
+        return 2;
+    }
+
+    const struct bt_gatt_attr* rotation_attr = bt_gatt_find_by_uuid(
+        _pengyro_bt_service.attrs,
+        _pengyro_bt_service.attr_count,
+        &_pengyro_bt_uuid_char_rotation.uuid
+    );
+
+    if (rotation_attr == NULL) {
+        LOG_ERR("Rotation attribute is not defined. This is a fatal error.");
         return 2;
     }
 
@@ -192,7 +201,7 @@ int pengyro_main() {
         LOG_INF("Sensor is initialized!");
 
         while (1) {
-            bool polling = _pengyro_notify_data;
+            bool polling = _pengyro_notify_data || _pengyro_notify_rotation;
 
             // Commands
             if (_pengyro_config.cmd == PENGYRO_CMD_CALIBRATE) {
@@ -252,6 +261,17 @@ int pengyro_main() {
             // Processing & notifying
             if (_pengyro_notify_data) {
                 if ((err = bt_gatt_notify(NULL, data_attr, &data, sizeof(struct pengyro_data)))) {
+                    LOG_WRN("Bluetooth GATT notify failed (%d)", err);
+                }
+            }
+
+            if (_pengyro_notify_rotation) {
+                double gyr_y = (double)data.gyr[1] * _pengyro_config.gyr_range / 32767;
+                double rotated = gyr_y * data.delta * _pengyro_consts.time_scale / 1e6;
+                rotation = fmod(rotation + rotated, 360.0);
+                if (rotation < 0) rotation += 360.0;
+
+                if ((err = bt_gatt_notify(NULL, rotation_attr, &rotation, sizeof(rotation)))) {
                     LOG_WRN("Bluetooth GATT notify failed (%d)", err);
                 }
             }
