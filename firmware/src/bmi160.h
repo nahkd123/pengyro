@@ -44,6 +44,17 @@ int bmi160_reset(const struct i2c_dt_spec* sensor);
 int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_range, uint16_t gyr_range);
 
 /**
+ * @brief Configure power mode
+ *
+ * This function configure power mode of accelerometer and gyroscope.
+ *
+ * @param sensor The sensor devicetree specification
+ * @param acc true to put accelerometer to normal mode, false to suspend
+ * @param gyr true to put gyroscope to normal mode, false to suspend
+ */
+int bmi160_pmu(const struct i2c_dt_spec* sensor, bool acc, bool gyr);
+
+/**
  * @brief Poll the sensor
  *
  * This function read the sensor data.

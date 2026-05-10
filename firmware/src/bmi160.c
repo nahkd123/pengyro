@@ -38,9 +38,12 @@ LOG_MODULE_REGISTER(bmi160);
 #define BMI160_GYR_CONF_BWP_NORMAL 0b0100000
 
 #define BMI160_CMD_FOC 0x03
-#define BMI160_CMD_ENABLE_ACCELEROMETER 0x11
-#define BMI160_CMD_ENABLE_GYROSCOPE 0x15
+#define BMI160_CMD_PMU_ACCELEROMETER(x) (0b00010000 | (x))
+#define BMI160_CMD_PMU_GYROSCOPE(x) (0b00010100 | (x))
 #define BMI160_CMD_SOFTRESET 0xB6
+
+#define BMI160_PMU_SUSPEND 0b00
+#define BMI160_PMU_NORMAL 0b01
 
 #define BMI160_CHIP_ID 0xD1
 #define BMI160_TIMESCALE_US 39
@@ -79,7 +82,6 @@ int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_r
     }
 
     switch (acc_range) {
-        case 0: break;
         case 2: acc_range_data = BMI160_ACC_RANGE_2; break;
         case 4: acc_range_data = BMI160_ACC_RANGE_4; break;
         case 8: acc_range_data = BMI160_ACC_RANGE_8; break;
@@ -89,7 +91,6 @@ int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_r
     }
 
     switch (gyr_range) {
-        case 0: break;
         case 125: gyr_range_data = BMI160_GYR_RANGE_125; break;
         case 250: gyr_range_data = BMI160_GYR_RANGE_250; break;
         case 500: gyr_range_data = BMI160_GYR_RANGE_500; break;
@@ -100,14 +101,11 @@ int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_r
             return -EINVAL;
     }
 
-    LOG_INF("Enabling sensor with data rate %dHz", odr);
+    LOG_INF("Configuring sensor with data rate %dHz", odr);
 
     if (acc_range != 0) {
-        LOG_INF("Enabling accelerometer with range +-%dg", acc_range);
-
-        if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_CMD, BMI160_CMD_ENABLE_ACCELEROMETER))) return err;
-        k_sleep(K_MSEC(10));
-
+        LOG_INF("Configuring accelerometer with range +-%dg", acc_range);
+        
         if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_ACC_CONF, odr_data))) return err;
 	    k_sleep(K_MSEC(1));
 
@@ -116,10 +114,7 @@ int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_r
     }
 
     if (gyr_range != 0) {
-        LOG_INF("Enabling gyroscope with range +-%ddeg/s", gyr_range);
-
-        if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_CMD, BMI160_CMD_ENABLE_GYROSCOPE))) return err;
-	    k_sleep(K_MSEC(100));
+        LOG_INF("Configuring gyroscope with range +-%ddeg/s", gyr_range);
 
         if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_GYR_CONF, odr_data))) return err;
 	    k_sleep(K_MSEC(1));
@@ -128,6 +123,19 @@ int bmi160_config(const struct i2c_dt_spec* sensor, uint16_t odr, uint16_t acc_r
 	    k_sleep(K_MSEC(1));
     }
 
+    return 0;
+}
+
+int bmi160_pmu(const struct i2c_dt_spec* sensor, bool acc, bool gyr) {
+    int err;
+
+    if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_CMD, BMI160_CMD_PMU_ACCELEROMETER(acc ? BMI160_PMU_NORMAL : BMI160_PMU_SUSPEND)))) return err;
+    k_sleep(K_MSEC(10));
+
+    if ((err = i2c_reg_write_byte_dt(sensor, BMI160_REG_CMD, BMI160_CMD_PMU_GYROSCOPE(gyr ? BMI160_PMU_NORMAL : BMI160_PMU_SUSPEND)))) return err;
+    k_sleep(K_MSEC(100));
+
+    LOG_INF("Reconfigured power mode");
     return 0;
 }
 

@@ -62,7 +62,7 @@ int pengyro_on_calibrate() {
 int pengyro_on_poll_start() {
 	int err;
 	struct bmi160_data bmi160;
-	LOG_INF("TODO: Resume sensor");
+	if ((err = bmi160_pmu(&sensor, true, true))) return err;
 	if ((err = bmi160_poll(&sensor, &bmi160))) return err;
 	last_sensortime = bmi160.time;
 	return 0;
@@ -86,6 +86,7 @@ int pengyro_on_poll(struct pengyro_data *data) {
 }
 
 int pengyro_on_poll_stop() {
-	LOG_INF("TODO: Suspend sensor");
+	int err;
+	if ((err = bmi160_pmu(&sensor, false, false))) return err;
 	return 0;
 }
