@@ -37,14 +37,15 @@ internal class BlueZModule : IModule
         {
             lastConfig = value;
             var raw = new byte[Unsafe.SizeOf<ModuleConfig>()];
-            Unsafe.WriteUnaligned<ModuleConfig>(ref raw[0], value);
+            Unsafe.WriteUnaligned(ref raw[0], value);
             configAttr.WriteValueAsync(raw, new Dictionary<string, object>()).Wait();
         }
     }
 
     public ushort DataRate
     {
-        get => Config.DataRate; set
+        get => Config.DataRate;
+        set
         {
             var newConfig = Config;
             newConfig.DataRate = value;
@@ -54,7 +55,8 @@ internal class BlueZModule : IModule
 
     public ushort AccelerometerRange
     {
-        get => Config.AccelerometerRange; set
+        get => Config.AccelerometerRange;
+        set
         {
             var newConfig = Config;
             newConfig.AccelerometerRange = value;
@@ -64,7 +66,8 @@ internal class BlueZModule : IModule
 
     public ushort GyroscopeRange
     {
-        get => Config.GyroscopeRange; set
+        get => Config.GyroscopeRange;
+        set
         {
             var newConfig = Config;
             newConfig.GyroscopeRange = value;
