@@ -14,6 +14,7 @@ public abstract class PenGyroBaseFilter : IPositionedPipelineElement<IDeviceRepo
     private IModule? module;
     private double lastRotation;
     private double rotation;
+    private double bias;
     private bool injectRotation = false;
     private readonly HPETDeltaStopwatch stopwatch = new(true);
 
@@ -30,6 +31,12 @@ public abstract class PenGyroBaseFilter : IPositionedPipelineElement<IDeviceRepo
     [Property("Interpolate duration (s)"), DefaultPropertyValue(0), ToolTip("The amount of time it takes to interpolate the value (use 0 to disable)")]
     public double InterpolateDurationSec { get; set; } = 0;
     protected TimeSpan InterpolateDuration => TimeSpan.FromSeconds(InterpolateDurationSec);
+
+    [Property("Interpolation curve"), DefaultPropertyValue(1), ToolTip("The exponent part (y) of x^y curve for interpolation")]
+    public double InterpolationCurve { get; set; } = 1;
+
+    [Property("Rotation bias (deg/report)"), DefaultPropertyValue(0), ToolTip("The amount of rotation bias to add on each report")]
+    public double RotationBias { get; set; } = 0;
 
     [TabletReference]
     public required TabletReference Tablet { get; set; }
@@ -49,8 +56,8 @@ public abstract class PenGyroBaseFilter : IPositionedPipelineElement<IDeviceRepo
         try
         {
             module = platform.Open(id.Value);
-            module.Data += OnData;
-            module.Start();
+            module.Rotation += OnRotation;
+            module.StartRotation();
             Log.Write("PenGyro", $"Connected to {module.Id}");
         }
         catch (Exception e)
@@ -69,7 +76,7 @@ public abstract class PenGyroBaseFilter : IPositionedPipelineElement<IDeviceRepo
 
             if (now < InterpolateDuration)
             {
-                var frac = now / InterpolateDuration;
+                var frac = Math.Pow(now / InterpolateDuration, InterpolationCurve);
                 var delta = (rotation - lastRotation) % 360;
                 if (delta > 180) delta -= 360;
                 if (delta < -180) delta += 360;
@@ -98,19 +105,21 @@ public abstract class PenGyroBaseFilter : IPositionedPipelineElement<IDeviceRepo
         Emit?.Invoke(value);
     }
 
-    private void OnData(object? sender, ModuleData data)
+    private void OnRotation(object? sender, double nextRotation)
     {
-        double rotated = data.GyroscopeY * data.Delta.TotalSeconds;
+        bias = Wrap(bias + RotationBias);
         lastRotation = InterpolatedRotation;
-        rotation = (rotation + (ReverseRotation ? -rotated : rotated)) % 360.0;
+        rotation = Wrap((ReverseRotation ? -nextRotation : nextRotation) + bias);
         if (rotation < 0) rotation += 360.0;
         injectRotation = true;
         stopwatch.Restart();
     }
 
+    private static double Wrap(double v) => ((v % 360.0) + 360.0) % 360.0;
+
     public void Dispose()
     {
-        module?.Stop();
+        module?.StopRotation();
         module?.Dispose();
         Log.Write("PenGyro", "Disposed rotation inject filter");
     }
